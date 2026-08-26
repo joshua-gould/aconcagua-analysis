@@ -190,6 +190,8 @@ def _segment_scallops(image, plate, well, tile):
         cyto_channel=STARDIST_PARAMS["cyto_index"],
         nuclei_channel=STARDIST_PARAMS["dapi_index"])
     counts = {}
+    counts["initial_nuclei"] = len(np.unique(nuclei_sd)) - 1
+    counts["initial_cells"] = len(np.unique(cells_sd)) - 1
     counts["final_nuclei"] = len(np.unique(nuclei_sd)) - 1
     counts["final_cells"] = len(np.unique(cells_sd)) - 1
     counts_df = pd.DataFrame([counts])
@@ -343,7 +345,7 @@ def benchmark_segmentation_methods():
                     cyto_index=CELLPOSE_PARAMS["cyto_index"],
                     nuclei_diameter=CELLPOSE_PARAMS["nuclei_diameter"],
                     cell_diameter=CELLPOSE_PARAMS["cell_diameter"],
-                    cyto_model=CELLPOSE_PARAMS["cellpose_model"],
+                    cellpose_model=CELLPOSE_PARAMS["cellpose_model"],
                     cellpose_kwargs=dict(
                         nuclei_flow_threshold=CELLPOSE_PARAMS["nuclei_flow_threshold"],
                         nuclei_cellprob_threshold=CELLPOSE_PARAMS[
@@ -481,7 +483,7 @@ def benchmark_segmentation_methods():
                     cyto_index=CELLPOSE4_PARAMS["cyto_index"],
                     nuclei_diameter=CELLPOSE4_PARAMS["nuclei_diameter"],
                     cell_diameter=CELLPOSE4_PARAMS["cell_diameter"],
-                    cyto_model=CELLPOSE4_PARAMS["cellpose_model"],
+                    cellpose_model=CELLPOSE4_PARAMS["cellpose_model"],
                     cellpose_kwargs=dict(
                         nuclei_flow_threshold=CELLPOSE4_PARAMS["nuclei_flow_threshold"],
                         nuclei_cellprob_threshold=CELLPOSE4_PARAMS[
