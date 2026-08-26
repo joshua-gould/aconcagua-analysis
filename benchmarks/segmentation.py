@@ -65,7 +65,7 @@ SELECTED_METHOD = args.method
 CELLPOSE_AVAILABLE = False
 CELLPOSE4_AVAILABLE = False
 STARDIST_AVAILABLE = False
-
+scallops_available = False
 segment_cellpose = None
 segment_stardist = None
 
@@ -97,7 +97,8 @@ if SELECTED_METHOD in ["stardist", "all"]:
         print("StarDist loaded successfully")
     except ImportError as e:
         print(f"Warning: StarDist not available ({e}). Skipping StarDist benchmark.")
-
+if SELECTED_METHOD in ["scallops", "all"]:
+    scallops_available = True
 random.seed(42)
 
 # Configure paths (relative to project root)
@@ -110,7 +111,8 @@ OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
 ALIGNED_DIR.mkdir(exist_ok=True, parents=True)
 
 # Create subdirectories for each segmentation method
-for method in ["cellpose", "cellpose4", "stardist"]:
+for method in ["cellpose", "cellpose4", "stardist", "scallops"]:
+    OUTPUT_DIR.mkdir(exist_ok=True, parents=True)
     (OUTPUT_DIR / method).mkdir(exist_ok=True)
 
 # Parameters for segmentation methods (from config.yml)
@@ -541,7 +543,7 @@ def benchmark_segmentation_methods():
 
             except Exception as e:
                 print(f"  Error running Cellpose 4 (CPSAM): {e}")
-        if STARDIST_AVAILABLE:
+        if scallops_available:
             _segment_scallops(image, plate, well, tile)
 
         # Clean up image to reduce memory usage
