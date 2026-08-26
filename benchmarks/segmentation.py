@@ -184,7 +184,7 @@ def _segment_scallops(image, plate, well, tile):
             nuclei_sd = segment_nuclei_stardist(image, nuclei_channel=STARDIST_PARAMS["dapi_index"])
 
             cells_sd = segment_cells_propagation(
-                imag=image,
+                image=image,
                 nuclei=nuclei_sd,
                 threshold="Li",
                 cyto_channel=STARDIST_PARAMS["cyto_index"],
