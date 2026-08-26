@@ -271,7 +271,7 @@ def collect_segmentation_stats():
     """Collect all segmentation stats into a single benchmark results file."""
     all_stats = []
 
-    for method in ["cellpose", "cellpose4", "stardist"]:
+    for method in ["cellpose", "cellpose4", "stardist", "scallops"]:
         stat_files = list((OUTPUT_DIR / method).glob("*_segmentation_stats.tsv"))
         for file in stat_files:
             try:
