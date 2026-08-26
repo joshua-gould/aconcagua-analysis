@@ -170,7 +170,7 @@ def get_memory_usage():
 
 
 def _segment_scallops(image, plate, well, tile):
-
+    (OUTPUT_DIR / "scallops").mkdir(parents=True, exist_ok=True)
     print("  Running scallops...")
 
     # Measure memory before GC to establish true baseline
@@ -228,7 +228,6 @@ def _segment_scallops(image, plate, well, tile):
     # Clean up to reduce memory usage
     del nuclei_sd, cells_sd, counts_df
     gc.collect()
-
 
 
 def prepare_test_images():
