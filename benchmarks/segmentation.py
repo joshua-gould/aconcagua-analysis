@@ -170,64 +170,64 @@ def get_memory_usage():
 
 
 def _segment_scallops(image, plate, well, tile):
-    if STARDIST_AVAILABLE:
-        print("  Running scallops...")
 
-        # Measure memory before GC to establish true baseline
-        gc.collect()
-        start_mem = get_memory_usage()
-        start_time = time.time()
-        import xarray as xr
-        from scallops.segmentation.propagation import segment_cells_propagation
-        from scallops.segmentation.stardist import segment_nuclei_stardist
-        image = xr.DataArray(image, dims=("c", "y", "x"))
-        nuclei_sd = segment_nuclei_stardist(image, nuclei_channel=STARDIST_PARAMS["dapi_index"])
+    print("  Running scallops...")
 
-        cells_sd, threshold = segment_cells_propagation(
-            image=image,
-            nuclei=nuclei_sd,
-            threshold="Li",
-            cyto_channel=STARDIST_PARAMS["cyto_index"],
-            nuclei_channel=STARDIST_PARAMS["dapi_index"])
-        counts = {}
-        counts["final_nuclei"] = len(np.unique(nuclei_sd)) - 1
-        counts["final_cells"] = len(np.unique(cells_sd)) - 1
-        counts_df = pd.DataFrame([counts])
-        scallops_time = time.time() - start_time
-        end_mem = get_memory_usage()
-        mem_usage = max(0, end_mem - start_mem)
+    # Measure memory before GC to establish true baseline
+    gc.collect()
+    start_mem = get_memory_usage()
+    start_time = time.time()
+    import xarray as xr
+    from scallops.segmentation.propagation import segment_cells_propagation
+    from scallops.segmentation.stardist import segment_nuclei_stardist
+    image = xr.DataArray(image, dims=("c", "y", "x"))
+    nuclei_sd = segment_nuclei_stardist(image, nuclei_channel=STARDIST_PARAMS["dapi_index"])
 
-        # Save segmentation results
-        nuclei_out = (
-                OUTPUT_DIR / "scallops" / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
-        )
-        cells_out = (
-                OUTPUT_DIR / "scallops" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
-        )
-        segmentation_stats_out = (
-                OUTPUT_DIR
-                / "scallops"
-                / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
-        )
+    cells_sd, threshold = segment_cells_propagation(
+        image=image,
+        nuclei=nuclei_sd,
+        threshold="Li",
+        cyto_channel=STARDIST_PARAMS["cyto_index"],
+        nuclei_channel=STARDIST_PARAMS["dapi_index"])
+    counts = {}
+    counts["final_nuclei"] = len(np.unique(nuclei_sd)) - 1
+    counts["final_cells"] = len(np.unique(cells_sd)) - 1
+    counts_df = pd.DataFrame([counts])
+    scallops_time = time.time() - start_time
+    end_mem = get_memory_usage()
+    mem_usage = max(0, end_mem - start_mem)
 
-        # Add info to the beginning of the counts_df (metadata)
-        counts_df.insert(0, "method", "scallops")
-        counts_df.insert(1, "plate", plate)
-        counts_df.insert(2, "well", well)
-        counts_df.insert(3, "tile", tile)
+    # Save segmentation results
+    nuclei_out = (
+            OUTPUT_DIR / "scallops" / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
+    )
+    cells_out = (
+            OUTPUT_DIR / "scallops" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
+    )
+    segmentation_stats_out = (
+            OUTPUT_DIR
+            / "scallops"
+            / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
+    )
 
-        # Add metrics to the end of the counts_df (performance metrics)
-        counts_df["runtime_seconds"] = scallops_time
-        counts_df["memory_mb"] = mem_usage
-        counts_df["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+    # Add info to the beginning of the counts_df (metadata)
+    counts_df.insert(0, "method", "scallops")
+    counts_df.insert(1, "plate", plate)
+    counts_df.insert(2, "well", well)
+    counts_df.insert(3, "tile", tile)
 
-        imwrite(nuclei_out, nuclei_sd.astype(np.uint16))
-        imwrite(cells_out, cells_sd.astype(np.uint16))
-        counts_df.to_csv(segmentation_stats_out, index=False, sep="\t")
+    # Add metrics to the end of the counts_df (performance metrics)
+    counts_df["runtime_seconds"] = scallops_time
+    counts_df["memory_mb"] = mem_usage
+    counts_df["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
-        # Clean up to reduce memory usage
-        del nuclei_sd, cells_sd, counts_df
-        gc.collect()
+    imwrite(nuclei_out, nuclei_sd.astype(np.uint16))
+    imwrite(cells_out, cells_sd.astype(np.uint16))
+    counts_df.to_csv(segmentation_stats_out, index=False, sep="\t")
+
+    # Clean up to reduce memory usage
+    del nuclei_sd, cells_sd, counts_df
+    gc.collect()
 
 
 
