@@ -15,26 +15,27 @@ Usage:
     python segmentation.py --method stardist   # Run only StarDist
 """
 
+import argparse
+import gc
+import glob
 import os
+import random
 import sys
 import time
-import random
-import glob
-import argparse
+from datetime import datetime
+from pathlib import Path
+
+import matplotlib.pyplot as plt
 import numpy as np
 import pandas as pd
-import matplotlib.pyplot as plt
-import seaborn as sns
-from tifffile import imread, imwrite
-from pathlib import Path
-from datetime import datetime
 import psutil
-import gc
+from tifffile import imread, imwrite
 from tqdm import tqdm
 
 # Add brieflow to path (relative to benchmarks directory)
 BENCHMARKS_DIR = Path(__file__).parent.resolve()
 PROJECT_ROOT = BENCHMARKS_DIR.parent
+
 sys.path.insert(0, str(PROJECT_ROOT / "brieflow" / "workflow"))
 
 
@@ -44,7 +45,7 @@ def parse_args():
     parser.add_argument(
         "--method",
         type=str,
-        choices=["cellpose", "cellpose4", "stardist", "all"],
+        choices=["cellpose", "cellpose4", "stardist", "all", "scallops"],
         default="all",
         help="Segmentation method to benchmark (default: all available)",
     )
@@ -168,6 +169,70 @@ def get_memory_usage():
     return process.memory_info().rss / 1024 / 1024  # Convert to MB
 
 
+def _segment_scallops(image, plate, well, tile):
+    if STARDIST_AVAILABLE:
+        print("  Running scallops...")
+        try:
+            # Measure memory before GC to establish true baseline
+            gc.collect()
+            start_mem = get_memory_usage()
+            start_time = time.time()
+            import xarray as xr
+            from scallops.segmentation.propagation import segment_cells_propagation
+            from scallops.segmentation.stardist import segment_nuclei_stardist
+            image = xr.DataArray(image, dims=("c", "y", "x"))
+            nuclei_sd = segment_nuclei_stardist(image, nuclei_channel=STARDIST_PARAMS["dapi_index"])
+
+            cells_sd = segment_cells_propagation(
+                imag=image,
+                nuclei=nuclei_sd,
+                threshold="Li",
+                cyto_channel=STARDIST_PARAMS["cyto_index"],
+                nuclei_channel=STARDIST_PARAMS["dapi_index"])
+            counts = {}
+            counts["final_nuclei"] = len(np.unique(nuclei_sd)) - 1
+            counts["final_cells"] = len(np.unique(cells_sd)) - 1
+            counts_df = pd.DataFrame([counts])
+            scallops_time = time.time() - start_time
+            end_mem = get_memory_usage()
+            mem_usage = max(0, end_mem - start_mem)
+
+            # Save segmentation results
+            nuclei_out = (
+                    OUTPUT_DIR / "scallops" / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
+            )
+            cells_out = (
+                    OUTPUT_DIR / "scallops" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
+            )
+            segmentation_stats_out = (
+                    OUTPUT_DIR
+                    / "scallops"
+                    / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
+            )
+
+            # Add info to the beginning of the counts_df (metadata)
+            counts_df.insert(0, "method", "scallops")
+            counts_df.insert(1, "plate", plate)
+            counts_df.insert(2, "well", well)
+            counts_df.insert(3, "tile", tile)
+
+            # Add metrics to the end of the counts_df (performance metrics)
+            counts_df["runtime_seconds"] = scallops_time
+            counts_df["memory_mb"] = mem_usage
+            counts_df["timestamp"] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+            imwrite(nuclei_out, nuclei_sd.astype(np.uint16))
+            imwrite(cells_out, cells_sd.astype(np.uint16))
+            counts_df.to_csv(segmentation_stats_out, index=False, sep="\t")
+
+            # Clean up to reduce memory usage
+            del nuclei_sd, cells_sd, counts_df
+            gc.collect()
+
+        except Exception as e:
+            print(f"  Error running scallops: {e}")
+
+
 def prepare_test_images():
     """Find one aligned image per plate randomly and copy to benchmark directory."""
     # Pattern to match aligned image files
@@ -234,9 +299,9 @@ def benchmark_segmentation_methods():
     """Run benchmark tests on all three segmentation methods."""
     # Get test images
     image_paths = list(ALIGNED_DIR.glob("*.tiff"))
-    if not image_paths:
-        print("No images found. Preparing test images...")
-        image_paths = prepare_test_images()
+    # if not image_paths:
+    #     print("No images found. Preparing test images...")
+    #     image_paths = prepare_test_images()
 
     print(f"Found {len(image_paths)} aligned images for benchmarking")
 
@@ -304,15 +369,15 @@ def benchmark_segmentation_methods():
 
                 # Save segmentation results
                 nuclei_out = (
-                    OUTPUT_DIR / "cellpose" / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
+                        OUTPUT_DIR / "cellpose" / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
                 )
                 cells_out = (
-                    OUTPUT_DIR / "cellpose" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
+                        OUTPUT_DIR / "cellpose" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
                 )
                 segmentation_stats_out = (
-                    OUTPUT_DIR
-                    / "cellpose"
-                    / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
+                        OUTPUT_DIR
+                        / "cellpose"
+                        / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
                 )
 
                 # Add info to the beginning of the counts_df (metadata)
@@ -370,15 +435,15 @@ def benchmark_segmentation_methods():
 
                 # Save segmentation results
                 nuclei_out = (
-                    OUTPUT_DIR / "stardist" / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
+                        OUTPUT_DIR / "stardist" / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
                 )
                 cells_out = (
-                    OUTPUT_DIR / "stardist" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
+                        OUTPUT_DIR / "stardist" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
                 )
                 segmentation_stats_out = (
-                    OUTPUT_DIR
-                    / "stardist"
-                    / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
+                        OUTPUT_DIR
+                        / "stardist"
+                        / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
                 )
 
                 # Add info to the beginning of the counts_df (metadata)
@@ -443,17 +508,17 @@ def benchmark_segmentation_methods():
 
                 # Save segmentation results
                 nuclei_out = (
-                    OUTPUT_DIR
-                    / "cellpose4"
-                    / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
+                        OUTPUT_DIR
+                        / "cellpose4"
+                        / f"P-{plate}_W-{well}_T-{tile}_nuclei.tiff"
                 )
                 cells_out = (
-                    OUTPUT_DIR / "cellpose4" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
+                        OUTPUT_DIR / "cellpose4" / f"P-{plate}_W-{well}_T-{tile}_cells.tiff"
                 )
                 segmentation_stats_out = (
-                    OUTPUT_DIR
-                    / "cellpose4"
-                    / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
+                        OUTPUT_DIR
+                        / "cellpose4"
+                        / f"P-{plate}_W-{well}_T-{tile}_segmentation_stats.tsv"
                 )
 
                 # Add info to the beginning of the counts_df (metadata)
@@ -477,6 +542,8 @@ def benchmark_segmentation_methods():
 
             except Exception as e:
                 print(f"  Error running Cellpose 4 (CPSAM): {e}")
+        if STARDIST_AVAILABLE:
+            _segment_scallops(image, plate, well, tile)
 
         # Clean up image to reduce memory usage
         del image
@@ -570,9 +637,9 @@ def generate_benchmark_summary(results_df):
     fig.suptitle("Cell and Nuclei Counts by Method", fontsize=18, fontweight="bold", y=0.98)
     fig.subplots_adjust(hspace=0.35)
     for ax, col, title in zip(
-        axes.flat,
-        ["initial_nuclei", "initial_cells", "final_cells", "runtime_seconds"],
-        ["Initial Nuclei", "Initial Cells", "Final Cells", "Runtime (s)"],
+            axes.flat,
+            ["initial_nuclei", "initial_cells", "final_cells", "runtime_seconds"],
+            ["Initial Nuclei", "Initial Cells", "Final Cells", "Runtime (s)"],
     ):
         box_strip(ax, results_df, "method", col, palette, method_order,
                   ylabel="Count per Tile" if "nuclei" in col or "cells" in col else "Seconds",
@@ -604,16 +671,16 @@ def generate_benchmark_summary(results_df):
     # Create retention by stage plots
     # Calculate the differences for the stacked bars
     results_df["edge_removed_nuclei"] = (
-        results_df["initial_nuclei"] - results_df["after_edge_removal_nuclei"]
+            results_df["initial_nuclei"] - results_df["after_edge_removal_nuclei"]
     )
     results_df["edge_removed_cells"] = (
-        results_df["initial_cells"] - results_df["after_edge_removal_cells"]
+            results_df["initial_cells"] - results_df["after_edge_removal_cells"]
     )
     results_df["reconciled_nuclei"] = (
-        results_df["after_edge_removal_nuclei"] - results_df["final_nuclei"]
+            results_df["after_edge_removal_nuclei"] - results_df["final_nuclei"]
     )
     results_df["reconciled_cells"] = (
-        results_df["after_edge_removal_cells"] - results_df["final_cells"]
+            results_df["after_edge_removal_cells"] - results_df["final_cells"]
     )
 
     fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(12, 5))
